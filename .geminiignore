@@ -1,0 +1,62 @@
+# ==========================================
+# .geminiignore
+# ==========================================
+
+# 1. Python Artifacts & Caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# 2. Virtual Environments (Crucial to ignore)
+venv/
+.venv/
+env/
+.env/
+denv/
+Pipfile.lock
+poetry.lock
+
+# 3. Build & Distribution Directories
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# 4. Version Control
+.git/
+.github/
+.svn/
+
+# 5. IDEs and Code Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# 6. Node.js / Frontend (if you have a mixed project)
+node_modules/
+.npm/
+
+# 7. Logs and Databases
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# 8. Media & Large Binary Files (These waste tokens instantly)
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.mp4
+*.zip
+*.tar.gz
+*.csv

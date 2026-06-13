@@ -1,0 +1,13 @@
+langgraph
+langgraph-checkpoint
+langchain
+langchain-core
+langchain-nvidia-ai-endpoints
+pydantic
+pandas
+openpyxl
+plotly
+streamlit
+python-dotenv
+reportlab
+kaleido
