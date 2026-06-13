@@ -58,4 +58,4 @@ agentic_data_analyst/
 - **Frontend**: Streamlit
 - **Visualization**: Plotly
 - **Database**: SQLite
-- **Environment**: Python 3.10+
+- **Environment**: Python 3.13

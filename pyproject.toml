@@ -1,7 +1,25 @@
 [project]
 name = "agentic-data-analyst"
 version = "0.1.0"
-description = "Add your description here"
+description = "A self-correcting multi-agent data analysis system using LangGraph and NVIDIA Nemotron-3."
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = []
+requires-python = ">=3.10"
+dependencies = [
+    "langgraph",
+    "langgraph-checkpoint",
+    "langchain",
+    "langchain-core",
+    "langchain-nvidia-ai-endpoints",
+    "pydantic",
+    "pandas",
+    "openpyxl",
+    "plotly",
+    "streamlit",
+    "python-dotenv",
+    "reportlab",
+    "kaleido",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
