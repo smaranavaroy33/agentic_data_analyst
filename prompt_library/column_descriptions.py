@@ -17,7 +17,7 @@ You will receive:
 </INSTRUCTIONS>
 
 <CONSTRAINTS>
-- Return ONLY the JSON object. No preamble, no postscript, no markdown code blocks.
+- Return ONLY the JSON object. You may optionally wrap it in ```json``` code blocks. No other preamble or postscript.
 - Ensure all keys match the column names exactly.
 - If a column's purpose is unclear, provide a high-level description based on its data type and values.
 </CONSTRAINTS>

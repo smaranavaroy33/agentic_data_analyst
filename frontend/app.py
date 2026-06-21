@@ -1,9 +1,12 @@
 import streamlit as st
 import os
+import re
 import sys
-import pandas as pd
-import uuid
 import json
+import logging
+import uuid
+
+import pandas as pd
 import sqlite3
 
 # --- Path Configuration ---
@@ -12,12 +15,13 @@ project_root = os.path.dirname(current_dir)
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-from utils.data_ingest import ingest_to_sqlite
-from graph.workflow import app as graph_app
-from graph.state import AgentState
-from utils.config import get_chat_model
-from prompt_library.column_descriptions import COLUMN_DESCRIPTION_PROMPT
-import plotly.express as px
+from utils.data_ingest import ingest_to_sqlite  # noqa: E402
+from graph.workflow import create_workflow  # noqa: E402
+from utils.config import get_chat_model  # noqa: E402
+from utils.safe_exec import safe_exec  # noqa: E402
+from prompt_library.column_descriptions import COLUMN_DESCRIPTION_PROMPT  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -27,21 +31,14 @@ st.set_page_config(
 )
 
 # --- Session Folder Management ---
-def get_next_session_number(base_dir="sessions"):
-    if not os.path.exists(base_dir):
-        os.makedirs(base_dir, exist_ok=True)
-        return 1
-    existing_sessions = [d for d in os.listdir(base_dir) if d.startswith("session_")]
-    numbers = []
-    for s in existing_sessions:
-        try: numbers.append(int(s.split("_")[1]))
-        except: continue
-    return max(numbers) + 1 if numbers else 1
+def get_next_session_id() -> str:
+    """Generate a unique session ID using UUID to prevent race conditions."""
+    return str(uuid.uuid4())[:8]
 
 # --- Session State Initialization ---
-if "session_num" not in st.session_state:
-    st.session_state.session_num = get_next_session_number()
-    st.session_state.session_dir = os.path.join("sessions", f"session_{st.session_state.session_num}")
+if "session_id" not in st.session_state:
+    st.session_state.session_id = get_next_session_id()
+    st.session_state.session_dir = os.path.join("sessions", f"session_{st.session_state.session_id}")
     os.makedirs(st.session_state.session_dir, exist_ok=True)
 
 if "db_path" not in st.session_state:
@@ -51,9 +48,9 @@ if "final_state" not in st.session_state:
 if "last_question" not in st.session_state:
     st.session_state.last_question = None
 if "column_descriptions" not in st.session_state:
-    st.session_state.column_descriptions = {} # Key: table_name, Value: dict of descriptions
+    st.session_state.column_descriptions = {}  # Key: table_name, Value: dict of descriptions
 if "preview_dfs" not in st.session_state:
-    st.session_state.preview_dfs = {} # Key: table_name, Value: DataFrame
+    st.session_state.preview_dfs = {}  # Key: table_name, Value: DataFrame
 if "analysis_history" not in st.session_state:
     st.session_state.analysis_history = []
 if "uploaded_file_names" not in st.session_state:
@@ -102,13 +99,11 @@ def get_column_descriptions(df):
         response = llm.invoke(messages)
         content = response.content.strip()
         
-        # Log response for debugging
-        print(f"DEBUG: LLM Column Description Response:\n{content}")
+        logger.debug("LLM Column Description Response:\n%s", content)
         
         # Robust JSON Extraction: 
         # 1. Try to find content between ```json and ```
         # 2. Try to find content between { and }
-        import re
         json_content = None
         
         code_block_match = re.search(r"```json\s*({.*?})\s*```", content, re.DOTALL)
@@ -120,7 +115,7 @@ def get_column_descriptions(df):
                 json_content = brace_match.group(1).strip()
         
         if not json_content:
-            json_content = content # Try the raw content if regex fails
+            json_content = content  # Try the raw content if regex fails
 
         descriptions = json.loads(json_content)
         
@@ -138,13 +133,12 @@ def get_column_descriptions(df):
         
         return final_descriptions
     except Exception as e:
-        print(f"ERROR in get_column_descriptions: {e}")
+        logger.error("Error in get_column_descriptions: %s", e)
         # Fallback to deterministic descriptions if LLM fails
         return {col: f"Column with {df[col].nunique()} unique {df[col].dtype} values." for col in df.columns}
 
 def main():
     st.title("Automated Data Analyst")
-    # st.caption(f"Project Workspace: {st.session_state.session_dir}")
 
     # --- Sidebar: Data Ingestion & Thinking History ---
     with st.sidebar:
@@ -163,7 +157,12 @@ def main():
                     # Sanitize filename for table name
                     table_name = os.path.splitext(uploaded_file.name)[0].lower()
                     table_name = "".join([c if c.isalnum() else "_" for c in table_name])
-                    if table_name[0].isdigit():
+                    table_name = table_name.strip("_")
+                    
+                    # Guard against empty table name after sanitization
+                    if not table_name:
+                        table_name = "unnamed_table"
+                    elif table_name[0].isdigit():
                         table_name = f"t_{table_name}"
                     
                     with st.spinner(f"Processing {uploaded_file.name}..."):
@@ -172,7 +171,7 @@ def main():
                             
                             # Load DF for preview and descriptions
                             with sqlite3.connect(st.session_state.db_path) as conn:
-                                df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+                                df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
                             
                             st.session_state.preview_dfs[table_name] = df
                             st.session_state.column_descriptions[table_name] = get_column_descriptions(df)
@@ -188,9 +187,6 @@ def main():
         
         # --- Thinking History (Persistent) ---
         st.header("🧠 Thinking History")
-        # if not st.session_state.analysis_history:
-        #     st.info("No thinking logs yet. Ask a question to see the model's reasoning!")
-        # else:
         for i, entry in enumerate(st.session_state.analysis_history):
             with st.expander(f"Q{i+1} Thinking: {entry['question'][:30]}...", expanded=False):
                 for step in entry.get("reasoning_log", []):
@@ -242,8 +238,7 @@ def main():
                         # 3. Visualization Finally
                         if entry['needs_chart'] and entry['plotly_code']:
                             try:
-                                scope = {"pd": pd, "px": px, "data": entry['raw_data']}
-                                exec(entry['plotly_code'], {}, scope)
+                                scope = safe_exec(entry['plotly_code'], entry['raw_data'])
                                 if "fig" in scope:
                                     st.plotly_chart(scope["fig"], use_container_width=True, key=f"chart_{i}")
                             except Exception as e:
@@ -300,15 +295,37 @@ def main():
                     st.rerun()
 
             if analyze_clicked and user_question:
-                initial_state = AgentState(
-                    user_question=user_question,
-                    file_name=", ".join(st.session_state.uploaded_file_names),
-                    session_id=str(st.session_state.session_num),
-                    db_path=st.session_state.db_path
-                )
+                # Build chat history string from the last 3 interactions
+                history_entries = []
+                for entry in st.session_state.analysis_history[-3:]:
+                    history_entries.append(f"User: {entry['question']}\nAssistant SQL: {entry['sql_query']}\nAssistant Summary: {entry['summary']}")
+                chat_history_str = "\n\n".join(history_entries)
+
+                # Build initial state as a plain dict (AgentState is now TypedDict)
+                initial_state = {
+                    "chat_history": chat_history_str,
+                    "user_question": user_question,
+                    "file_name": ", ".join(st.session_state.uploaded_file_names),
+                    "session_id": st.session_state.session_id,
+                    "db_path": st.session_state.db_path,
+                    "schema_info": "",
+                    "sql_query": "",
+                    "sql_error": "",
+                    "raw_data": [],
+                    "needs_chart": False,
+                    "plotly_code": "",
+                    "visualization_error": "",
+                    "final_summary": "",
+                    "sql_retry_count": 0,
+                    "viz_retry_count": 0,
+                    "reasoning_log": [],
+                }
 
                 # Thread ID for the checkpointer
-                config = {"configurable": {"thread_id": st.session_state.session_num}}
+                config = {"configurable": {"thread_id": st.session_state.session_id}}
+                
+                # Get the lazily-compiled graph
+                graph_app = create_workflow()
 
                 # Use the pre-defined live container in the sidebar
                 with live_thinking_container:
@@ -342,8 +359,8 @@ def main():
                             "sql_query": final_state_dict.get("sql_query"),
                             "reasoning_log": final_state_dict.get("reasoning_log", [])
                         })
-                        st.session_state.final_state = final_state_dict # Update current state for sidebar
-                        st.rerun() # Refresh to show new entry and move input down
+                        st.session_state.final_state = final_state_dict
+                        st.rerun()
                     except Exception as e:
                         st.error(f"Execution Error: {e}")
         else:

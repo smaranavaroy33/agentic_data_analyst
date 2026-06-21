@@ -2,13 +2,13 @@ import os
 import tempfile
 from io import BytesIO
 import re
-import pandas as pd
-import plotly.express as px
 
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Preformatted
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+
+from utils.safe_exec import safe_exec
 
 def generate_insights_pdf(analysis_history):
     """
@@ -84,9 +84,8 @@ def generate_insights_pdf(analysis_history):
         
         if needs_chart and plotly_code:
             try:
-                # Re-execute code to generate the figure object
-                scope = {"pd": pd, "px": px, "data": raw_data}
-                exec(plotly_code, {}, scope)
+                # Re-execute code to generate the figure object using safe_exec
+                scope = safe_exec(plotly_code, raw_data)
                 
                 if "fig" in scope:
                     fig = scope["fig"]

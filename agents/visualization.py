@@ -1,13 +1,12 @@
-import pandas as pd
 import re
+import pandas as pd
+from typing import Any
 from graph.state import AgentState
 from prompt_library.visualization_prompts import VISUALIZATION_PROMPT
 from utils.config import get_chat_model
 from utils.reasoning import extract_reasoning
 
-llm = get_chat_model()
-
-def visualization_drafter(state: AgentState):
+def visualization_drafter(state: AgentState) -> dict[str, Any]:
     """
     Generates Python Plotly code to visualize the retrieved data.
 
@@ -22,8 +21,10 @@ def visualization_drafter(state: AgentState):
     Returns:
         dict: A dictionary updating 'plotly_code' and 'retry_count'.
     """
-    user_q = state.user_question
-    raw_data = state.raw_data
+    llm = get_chat_model()
+    user_q = state["user_question"]
+    chat_history = state.get("chat_history", "")
+    raw_data = state.get("raw_data", [])
     
     # Generate stats instead of just truncating
     df = pd.DataFrame(raw_data)
@@ -34,11 +35,13 @@ def visualization_drafter(state: AgentState):
     else:
         data_context = "No data returned from query."
     
-    error = state.visualization_error
-    viz_retry_count = state.viz_retry_count
+    error = state.get("visualization_error", "")
+    viz_retry_count = state.get("viz_retry_count", 0)
     
     # Construct the context for the visualization drafting
     input_content = f"User Question: {user_q}\n\n{data_context}"
+    if chat_history:
+        input_content = f"Chat History:\n{chat_history}\n\n{input_content}"
     
     if error:
         input_content += f"\n\nPrevious Python Error:\n{error}\nPlease fix the code based on this error."
@@ -53,7 +56,7 @@ def visualization_drafter(state: AgentState):
     plotly_code = response.content.strip()
 
     # Capture Reasoning (Thinking)
-    new_reasoning = extract_reasoning(response, "Visualization Drafter", state)
+    new_reasoning = extract_reasoning(response, "Visualization Drafter")
 
     # Robust Python Markdown Stripping
     python_match = re.search(r"```(?:python)?(.*?)```", plotly_code, re.DOTALL | re.IGNORECASE)

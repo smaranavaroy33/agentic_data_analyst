@@ -1,6 +1,9 @@
-def extract_reasoning(response, agent_name, state):
+def extract_reasoning(response, agent_name: str) -> list[dict]:
     """
-    Extracts the reasoning (thinking) block from an LLM response and updates the state.
+    Extracts the reasoning (thinking) block from an LLM response.
+    
+    Returns a list with a single entry if reasoning is found, or an empty list.
+    The list is merged into state.reasoning_log via the operator.add reducer.
     """
     reasoning = ""
     if hasattr(response, "response_metadata"):
@@ -20,8 +23,6 @@ def extract_reasoning(response, agent_name, state):
     if not reasoning and hasattr(response, "additional_kwargs"):
         reasoning = response.additional_kwargs.get("reasoning_content", "")
 
-    new_reasoning = state.reasoning_log.copy() if hasattr(state, 'reasoning_log') else []
     if reasoning:
-        new_reasoning.append({"agent": agent_name, "content": reasoning})
-        
-    return new_reasoning
+        return [{"agent": agent_name, "content": reasoning}]
+    return []

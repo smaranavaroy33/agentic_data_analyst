@@ -1,11 +1,15 @@
+import re
 import sqlite3
+from typing import Any
 from graph.state import AgentState
 
-def schema_extractor(state: AgentState):
+_VALID_IDENTIFIER = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+
+def schema_extractor(state: AgentState) -> dict[str, Any]:
     """
     Extracts the schema from the temporary SQLite database.
 
-    This node connects to the database specified in 'state.db_path', 
+    This node connects to the database specified in 'state["db_path"]', 
     retrieves all table names, and then fetches the column names 
     and types for each table.
 
@@ -15,7 +19,7 @@ def schema_extractor(state: AgentState):
     Returns:
         dict: A dictionary containing the 'schema_info' string.
     """
-    db_path = state.db_path
+    db_path = state["db_path"]
     schema_parts = []
     
     try:
@@ -28,10 +32,15 @@ def schema_extractor(state: AgentState):
         
         for table in tables:
             table_name = table[0]
+            
+            # Validate identifier to prevent SQL injection
+            if not _VALID_IDENTIFIER.match(table_name):
+                continue
+                
             schema_parts.append(f"Table: {table_name}")
             
-            # 2. Get columns for each table
-            cursor.execute(f"PRAGMA table_info({table_name});")
+            # 2. Get columns for each table (identifier validated above)
+            cursor.execute(f'PRAGMA table_info("{table_name}");')
             columns = cursor.fetchall()
             
             for col in columns:
@@ -41,9 +50,12 @@ def schema_extractor(state: AgentState):
                 
                 # Fetch up to 3 unique sample values to help the LLM with exact casing/formatting
                 try:
-                    cursor.execute(f"SELECT DISTINCT `{col_name}` FROM `{table_name}` WHERE `{col_name}` IS NOT NULL LIMIT 3;")
-                    samples = [str(row[0]) for row in cursor.fetchall()]
-                    sample_str = f" (Sample values: {', '.join(samples)})" if samples else ""
+                    if not _VALID_IDENTIFIER.match(col_name):
+                        sample_str = ""
+                    else:
+                        cursor.execute(f'SELECT DISTINCT "{col_name}" FROM "{table_name}" WHERE "{col_name}" IS NOT NULL LIMIT 3;')
+                        samples = [str(row[0]) for row in cursor.fetchall()]
+                        sample_str = f" (Sample values: {', '.join(samples)})" if samples else ""
                 except Exception:
                     sample_str = ""
                     

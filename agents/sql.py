@@ -1,12 +1,11 @@
+import re
+from typing import Any
 from graph.state import AgentState
 from prompt_library.sql_prompts import SQL_DRAFTER_PROMPT
 from utils.config import get_chat_model
 from utils.reasoning import extract_reasoning
-import re
 
-llm = get_chat_model()
-
-def sql_drafter(state: AgentState):
+def sql_drafter(state: AgentState) -> dict[str, Any]:
     """
     Drafts a SQL query based on the user question and database schema.
 
@@ -20,13 +19,18 @@ def sql_drafter(state: AgentState):
     Returns:
         dict: A dictionary containing the generated 'sql_query' and updated 'retry_count'.
     """
-    user_q = state.user_question
-    schema = state.schema_info
-    error = state.sql_error
-    sql_retry_count = state.sql_retry_count
+    llm = get_chat_model()
+    user_q = state["user_question"]
+    chat_history = state.get("chat_history", "")
+    schema = state.get("schema_info", "")
+    error = state.get("sql_error", "")
+    sql_retry_count = state.get("sql_retry_count", 0)
     
     # Construct the user message with the current context
     user_message = f"User Question: {user_q}\n\nDatabase Schema:\n{schema}"
+    
+    if chat_history:
+        user_message = f"Chat History:\n{chat_history}\n\n" + user_message
     
     if error:
         user_message += f"\n\nPrevious SQL Error: {error}\nPlease fix the query based on this error."
@@ -41,7 +45,7 @@ def sql_drafter(state: AgentState):
     sql_query = response.content.strip()
 
     # Capture Reasoning (Thinking)
-    new_reasoning = extract_reasoning(response, "SQL Drafter", state)
+    new_reasoning = extract_reasoning(response, "SQL Drafter")
 
     # Robust Markdown Stripping
     # Matches ```sql ... ``` or ``` ... ```

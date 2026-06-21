@@ -1,3 +1,4 @@
+from functools import lru_cache
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from graph.state import AgentState
@@ -9,15 +10,13 @@ from agents.visualization import visualization_drafter
 from tools.python_repl import visualization_tester
 from agents.summary import inference_agent
 
+@lru_cache(maxsize=1)
 def create_workflow():
     """
     Constructs the LangGraph workflow for the self-correcting data analyst.
 
     This function defines the nodes, linear edges, and conditional routing 
-    logic for the entire analysis pipeline.
-
-    Args:
-        None
+    logic for the entire analysis pipeline. Uses lru_cache to compile once.
 
     Returns:
         CompiledGraph: The compiled LangGraph application ready for execution.
@@ -44,7 +43,7 @@ def create_workflow():
 
     # SQL Correction Loop: Check if execution failed
     def should_continue_sql(state: AgentState):
-        if state.sql_error and state.sql_retry_count < 3:
+        if state.get("sql_error") and state.get("sql_retry_count", 0) < 3:
             return "retry"
         return "continue"
 
@@ -59,7 +58,7 @@ def create_workflow():
 
     # Visualization Fork: Decision from the Router
     def should_visualize(state: AgentState):
-        if state.needs_chart:
+        if state.get("needs_chart", False):
             return "yes"
         return "no"
 
@@ -74,7 +73,7 @@ def create_workflow():
 
     # Visualization Correction Loop: Check if python code failed
     def should_continue_visualization(state: AgentState):
-        if state.visualization_error and state.viz_retry_count < 3:
+        if state.get("visualization_error") and state.get("viz_retry_count", 0) < 3:
             return "retry"
         return "continue"
 
@@ -90,7 +89,3 @@ def create_workflow():
     # Initialize MemorySaver checkpointer
     memory = MemorySaver()
     return workflow.compile(checkpointer=memory)
-
-# Compile the graph
-app = create_workflow()
-

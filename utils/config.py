@@ -1,11 +1,14 @@
+from functools import lru_cache
 from dotenv import load_dotenv
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 
 load_dotenv()
 
+@lru_cache(maxsize=1)
 def get_chat_model():
     """
     Returns the primary Chat Model for the application.
+    Uses lru_cache to ensure a single shared instance.
     """
     # The client automatically picks up the NVIDIA_API_KEY environment variable
     return ChatNVIDIA(
